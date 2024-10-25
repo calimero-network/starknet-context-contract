@@ -204,7 +204,7 @@ pub mod ContextConfig {
             // self.emit(StorageUsage { message: format!("Post-erase storage usage: {}", post_storage) });
         }
         
-        fn mutate(ref self: ContractState, signed_request: Signed<Request>) {
+        fn mutate(ref self: ContractState, signed_request: Signed) {
             // Deserialize the payload
             let mut serialized = signed_request.payload.span();
             let request: Request = Serde::deserialize(ref serialized).unwrap();
@@ -275,7 +275,7 @@ pub mod ContextConfig {
 
     #[generate_trait]
     impl SignatureVerifier of SignatureVerifierTrait {
-        fn verify_signature(self: @ContractState, signed_request: @Signed<Request>, signer_id: ContextIdentity) -> bool {
+        fn verify_signature(self: @ContractState, signed_request: @Signed, signer_id: ContextIdentity) -> bool {
             // Hash the payload using Poseidon hash
             let hash = PoseidonTrait::new().update_with(poseidon_hash_span(signed_request.payload.span())).finalize();
     

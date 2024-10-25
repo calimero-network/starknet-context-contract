@@ -111,7 +111,7 @@ mod tests {
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -150,7 +150,7 @@ mod tests {
         request.serialize(ref serialized);
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         let (r, s): (felt252, felt252) = context_key_pair.sign(hash).unwrap();
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -225,7 +225,7 @@ mod tests {
         // Sign the hash
         let (r, s): (felt252, felt252) = context_key_pair.sign(hash).unwrap();
 
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -247,7 +247,7 @@ mod tests {
             source: "https://calimero.network",
             metadata: "Some metadata",
         };
-        
+            
         // Store the application values for later comparison
         let app_id = application.id;
         let app_blob = application.blob;
@@ -326,7 +326,7 @@ mod tests {
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -389,7 +389,7 @@ mod tests {
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         // Sign the hash
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -421,7 +421,7 @@ mod tests {
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
 
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -459,7 +459,7 @@ mod tests {
         // Sign the hash
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
 
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -561,7 +561,7 @@ mod tests {
         // Sign the hash
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
 
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -610,7 +610,7 @@ mod tests {
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -662,7 +662,7 @@ mod tests {
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
 
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
@@ -740,7 +740,7 @@ mod tests {
         request.serialize(ref serialized);
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
-        let signed_request: Signed<Request> = Signed {
+        let signed_request: Signed = Signed {
             payload: serialized,
             signature: (r, s),
         };
