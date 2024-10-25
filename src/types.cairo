@@ -1,5 +1,11 @@
+
+use core::fmt::{Display, Error, Formatter};
+
 #[derive(Drop, Serde, starknet::Store)]
 pub type ContextId = felt252;
+
+#[derive(Drop, Serde, starknet::Store)]
+pub type MemberIndex = u32;
 
 // Context Member ID
 #[derive(Drop, Serde, Debug, starknet::Store)]
@@ -22,25 +28,22 @@ pub struct Application {
     pub metadata: ByteArray,  // Represents ApplicationMetadata
 }
 
-// Context Config
-#[derive(Drop, Serde, starknet::Store)]
-pub struct Config {
-    pub validity_threshold_ms: u64,
-}
-
-// #[derive(Drop, Serde)]
-// pub struct ContextDetails {
-//     pub context_id: felt252,  // Represents [u8; 32]
-//     pub application: Application,
-//     pub member_count: u32,
-//     pub members: Array<ContextIdentity>,
-// }
-
 // Context Capabilities
 #[derive(Drop, Serde, PartialEq, Copy, Debug)]
 pub enum Capability {
     ManageApplication,
     ManageMembers,
+}
+
+// Add this implementation to your types.cairo file
+impl CapabilityDisplay of core::fmt::Display<Capability> {
+    fn fmt(self: @Capability, ref f: Formatter) -> Result<(), Error> {
+        let capability_str: ByteArray = match self {
+            Capability::ManageApplication => "ManageApplication",
+            Capability::ManageMembers => "ManageMembers",
+        };
+        Display::fmt(@capability_str, ref f)
+    }
 }
 
 // Convert Capability to felt252
@@ -74,7 +77,7 @@ pub struct Signed<T> {
 pub struct Request {
     pub kind: RequestKind,
     pub signer_id: ContextIdentity,
-    pub timestamp_ms: u64,
+    pub nonce: u64,
 }
 
 #[derive(Drop, Serde, Debug)]
@@ -99,45 +102,34 @@ pub enum ContextRequestKind {
 }
 
 // Events
-
 #[derive(Drop, starknet::Event)]
 pub struct ContextCreated {
     pub message: ByteArray,
 }
 
-// Define the Event enum here
-#[event]
 #[derive(Drop, starknet::Event)]
-pub enum Event {
-    ContextCreated: ContextCreated
+pub struct MemberRemoved {
+    pub message: ByteArray,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct MemberAdded {
+    pub message: ByteArray,
 }
 
 // #[event]
-// #[derive(Drop, starknet::Event)]
-// struct MemberRemoved {
-//     context_id: felt252,
-//     member_id: ContextIdentity
-// }
+#[derive(Drop, starknet::Event)]
+pub struct ApplicationUpdated {
+    pub message: ByteArray,
+}
 
-// #[event]
-// #[derive(Drop, starknet::Event)]
-// struct MemberAdded {
-//     context_id: felt252,
-//     member_id: ContextIdentity
-// }
 
-// #[event]
-// #[derive(Drop, starknet::Event)]
-// struct ApplicationUpdated {
-//     context_id: felt252,
-//     old_application_id: felt252,
-//     new_application_id: felt252
-// }
+#[derive(Drop, starknet::Event)]
+pub struct CapabilityGranted {
+    pub message: ByteArray,
+}
 
-// #[event]
-// #[derive(Drop, starknet::Event)]
-// struct CapabilityGranted {
-//     context_id: felt252,
-//     member_id: ContextIdentity,
-//     capability: Capability
-// }
+#[derive(Drop, starknet::Event)]
+pub struct CapabilityRevoked {
+    pub message: ByteArray,
+}

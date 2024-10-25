@@ -2,43 +2,96 @@ pub mod types;
 pub mod i_context_configs;
 
 // Export the types and interfaces
-pub use types::{Application, Context, Config, Capability, Signed, ContextId, RequestKind, Request, ContextIdentity, ContextRequestKind, ContextRequest};
-pub use i_context_configs::{IContextConfigs, IContextConfigsDispatcher, IContextConfigsDispatcherTrait, IContextConfigsSafeDispatcher, IContextConfigsSafeDispatcherTrait};
+pub use types::{
+    Application,
+    Context,
+    Capability,
+    Signed,
+    ContextId,
+    RequestKind,
+    Request,
+    ContextIdentity,
+    ContextRequestKind,
+    ContextRequest
+};
+pub use i_context_configs::{
+    IContextConfigs, 
+    IContextConfigsDispatcher, 
+    IContextConfigsDispatcherTrait, 
+    IContextConfigsSafeDispatcher, 
+    IContextConfigsSafeDispatcherTrait
+};
 
 #[starknet::contract]
 pub mod ContextConfig {
-    use starknet::get_block_timestamp;
     use core::poseidon::PoseidonTrait;
     use core::poseidon::poseidon_hash_span;
     use core::hash::{HashStateTrait, HashStateExTrait};
     use core::ecdsa::check_ecdsa_signature;
-    use starknet::storage::{Map, StoragePointerReadAccess, StoragePointerWriteAccess};
-    use context_config::types::{Application, Context, Config, Capability, Signed, ContextId, RequestKind, 
+    use starknet::storage::{
+        Map,
+        StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+        Vec,
+        MutableVecTrait
+    };
+    use context_config::types::{
+        Application, 
+        Context,
+        Capability, 
+        Signed, 
+        ContextId, 
+        RequestKind,
+        MemberIndex,
         Request, 
         ContextIdentity, 
         ContextRequestKind, 
-        ContextCreated
+        ContextCreated,
+        MemberAdded,
+        MemberRemoved,
+        CapabilityGranted,
+        ApplicationUpdated,
+        CapabilityRevoked,
     };
-    
+
+    use starknet::ContractAddress;
+
+    use openzeppelin_access::ownable::OwnableComponent;
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+
     #[event]
-    use context_config::types::Event;
+    #[derive(Drop, starknet::Event)]
+    pub enum Event {
+        ContextCreated: ContextCreated,
+        MemberAdded: MemberAdded,
+        ApplicationUpdated: ApplicationUpdated,
+        CapabilityGranted: CapabilityGranted,
+        CapabilityRevoked: CapabilityRevoked,
+        MemberRemoved: MemberRemoved,
+        #[flat]
+        OwnableEvent: OwnableComponent::Event
+    }
 
     #[storage]
     struct Storage {
         contexts: Map::<ContextId, Context>,
-        config: Config,
+        context_ids: Vec<ContextId>,
         privileges: Map::<felt252, bool>,
-        context_members: Map::<(ContextId, u32), ContextIdentity>,
-        context_member_indices: Map::<(ContextId, ContextIdentity), u32>,
+        context_members: Map::<(ContextId, MemberIndex), ContextIdentity>,
+        context_members_nonce: Map::<(ContextId, ContextIdentity), u64>,
+        context_member_indices: Map::<(ContextId, ContextIdentity), MemberIndex>,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage
     }
-
-    const DEFAULT_VALIDITY_THRESHOLD_MS: u64 = 10_000;
-    const MIN_VALIDITY_THRESHOLD_MS: u64 = 5_000;
 
     #[constructor]
-    fn constructor(ref self: ContractState) {
-        self.config.write(Config { validity_threshold_ms: DEFAULT_VALIDITY_THRESHOLD_MS });
+    fn constructor(ref self: ContractState, owner: ContractAddress) {
+        self.ownable.initializer(owner);
     }
+
+    #[abi(embed_v0)]
+    impl OwnableMixinImpl = OwnableComponent::OwnableMixinImpl<ContractState>;
+    impl InternalImpl = OwnableComponent::InternalImpl<ContractState>;
 
     #[abi(embed_v0)]
     impl ContextConfigsImpl of super::i_context_configs::IContextConfigs<ContractState> {
@@ -49,6 +102,10 @@ pub mod ContextConfig {
             
             // Return the application associated with this context
             context.application
+        }
+
+        fn get_member_nonce(self: @ContractState, context_id: ContextId, member_id: ContextIdentity) -> u64 {
+            self.context_members_nonce.read((context_id, member_id))
         }
 
         fn members(self: @ContractState, context_id: ContextId, offset: u32, length: u32) -> Array<ContextIdentity> {
@@ -84,17 +141,15 @@ pub mod ContextConfig {
 
             if identities.len() == 0 {
                 // Return privileges for all members
-                let mut i: u32 = 0;
+                let mut i: u32 = 1;
                 loop {
-                    if i >= context.member_count {
-                        assert(false, 'No members found');
+                    if i > context.member_count {
                         break;
                     }
                     let member = self.context_members.read((context_id, i));
                     let capabilities = self.get_member_capabilities(context_id, member);
-                    if capabilities.len() > 0 {
-                        result.append((member, capabilities));
-                    }
+
+                    result.append((member, capabilities));
                     i += 1;
                 };
             } else {
@@ -106,55 +161,111 @@ pub mod ContextConfig {
                     }
                     let identity = *identities.at(i);
                     let capabilities = self.get_member_capabilities(context_id, identity);
-                    if capabilities.len() > 0 {
-                        result.append((identity, capabilities));
-                    }
+                    result.append((identity, capabilities));
                     i += 1;
                 };
             }
 
             result
         }
+
+        fn erase(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            // Erase all contexts
+            let context_number = self.context_ids.len();
+            for i in 0..context_number {
+                let context_id = self.context_ids.at(i).read();
+                let context = self.contexts.read(context_id);
+                let member_count = context.member_count;
+                let mut j: u32 = 1;
+                loop {
+                    if j > member_count {
+                        break;
+                    }
+                    let member = self.context_members.read((context_id, j));
+                    self.context_members.write((context_id, j), 0.into());
+                    self.context_member_indices.write((context_id, member), 0);
+                    j += 1;
+                };
+                
+                self.contexts.write(context_id, Context {
+                    application: Application {
+                        id: 0.into(),
+                        blob: 0.into(),
+                        size: 0,
+                        source: "",
+                        metadata: "",
+                    },
+                    member_count: 0,
+                });
+            }
+
+            // Log post-erase storage usage
+            // self.emit(StorageUsage { message: format!("Post-erase storage usage: {}", post_storage) });
+        }
         
         fn mutate(ref self: ContractState, signed_request: Signed<Request>) {
-
             // Deserialize the payload
             let mut serialized = signed_request.payload.span();
             let request: Request = Serde::deserialize(ref serialized).unwrap();
 
             assert(self.verify_signature(@signed_request, request.signer_id), 'Invalid signature');
 
-            let current_timestamp = get_block_timestamp();
-            let config = self.config.read();
-            assert(
-                current_timestamp - request.timestamp_ms <= config.validity_threshold_ms,
-                'Request expired'
-            );
-        
             match request.kind {
                 RequestKind::Context(context_request) => {
-                    match context_request.kind {
+                    match context_request.kind {  
                         ContextRequestKind::Add((author_id, application)) => {
                             self.add_context(request.signer_id, context_request.context_id, author_id, application);
                         },
                         ContextRequestKind::UpdateApplication(application) => {
+                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            assert(
+                                current_nonce == request.nonce,
+                                'Nonce mismatch'
+                            );
+                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.update_application(request.signer_id, context_request.context_id, application);
                         },
                         ContextRequestKind::AddMembers(members) => {
+                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            assert(
+                                current_nonce == request.nonce,
+                                'Nonce mismatch'
+                            );
+                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.add_members(request.signer_id, context_request.context_id, members);
                         },
                         ContextRequestKind::RemoveMembers(members) => {
+                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            assert(
+                                current_nonce == request.nonce,
+                                'Nonce mismatch'
+                            );
+                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.remove_members(request.signer_id, context_request.context_id, members);
                         },
                         ContextRequestKind::Grant(capabilities) => {
+                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            assert(
+                                current_nonce == request.nonce,
+                                'Nonce mismatch'
+                            );
+                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.grant(request.signer_id, context_request.context_id, capabilities);
                         },
                         ContextRequestKind::Revoke(capabilities) => {
+                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            assert(
+                                current_nonce == request.nonce,
+                                'Nonce mismatch'
+                            );
+                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.revoke(request.signer_id, context_request.context_id, capabilities);
                         },
                     }
                 },
             }
+            
         }
     }
 
@@ -198,15 +309,17 @@ pub mod ContextConfig {
             // Create new context
             let new_context = Context {
                 application: application,
-                member_count: 1, // Start with one member (author)
+                member_count: 0,
             };
             self.contexts.write(context_id, new_context);
-        
+
+            self.context_ids.append().write(context_id);
             // Add author as first member
             self.add_member(context_id, author_id);
         
             // Grant initial privileges to author
             self.grant_privilege(context_id, author_id, Capability::ManageApplication);
+            self.context_members_nonce.write((context_id, author_id), 1);
             self.grant_privilege(context_id, author_id, Capability::ManageMembers);
         
             // Log context creation (you'd need to implement logging for Starknet)
@@ -220,6 +333,7 @@ pub mod ContextConfig {
         ) {
             // Read the current context
             let mut context = self.contexts.read(context_id);
+            // assert(context.member_count == 0, 'Context has 0 members');
             
             // Check if the member already exists
             let existing_index = self.context_member_indices.read((context_id, member_id));
@@ -235,7 +349,7 @@ pub mod ContextConfig {
             self.contexts.write(context_id, context);
     
             // Optionally, emit an event
-            // self.emit(MemberAdded { context_id: context_id, member_id: member_id });
+            self.emit(MemberAdded { message: format!("Added `{}` as a member of `{}`", member_id, context_id) });
         }
 
         fn update_application(
@@ -251,22 +365,19 @@ pub mod ContextConfig {
             // Check if the signer has the necessary permissions
             assert(
                 self.has_privilege(context_id, signer_id, Capability::ManageApplication), 
-                'Unauthorized'
+                'missing privileges'
             );
     
             // Store the old application ID for logging
-            // let old_application_id = context.application.id;
+            let old_application_id = context.application.id;
     
             // Update the context's application
-            context.application = new_application;
+            context.application = new_application.clone();
             self.contexts.write(context_id, context);
     
-            // // Log the update (Note: Starknet doesn't have built-in logging, so we'll use events)
-            // self.emit(ApplicationUpdated {
-            //     context_id: context_id,
-            //     old_application_id: old_application_id,
-            //     new_application_id: new_application.id
-            // });
+            self.emit(ApplicationUpdated { 
+                message: format!("Updated application for context `{}` from `{}` to `{}`", context_id, old_application_id, new_application.id)
+            });
         }
 
         fn add_members(
@@ -282,7 +393,7 @@ pub mod ContextConfig {
             // Check if the signer has the necessary permissions
             assert(
                 self.has_privilege(context_id, signer_id, Capability::ManageMembers), 
-                'Unauthorized'
+                'unable to update member list'
             );
     
             // Add members
@@ -303,7 +414,7 @@ pub mod ContextConfig {
                             context.member_count += 1;
                             
                             // Emit an event for the added member
-                            // self.emit(MemberAdded { context_id: context_id, member_id: member });
+                            self.emit(MemberAdded { message: format!("Added `{}` as a member of `{}`", member, context_id)});
                         }
                         i += 1;
                     },
@@ -340,7 +451,15 @@ pub mod ContextConfig {
                         // Check if the member exists
                         let member_index = self.context_member_indices.read((context_id, member));
                         if member_index != 0 {
+                            // Move the last member to this position
+                            if member_index != context.member_count {
+                                let last_member = self.context_members.read((context_id, context.member_count));
+                                self.context_members.write((context_id, member_index), last_member);
+                                self.context_member_indices.write((context_id, last_member), member_index);
+                            }
+                            
                             // Remove the member
+                            self.context_members.write((context_id, context.member_count), 0.into());
                             self.context_member_indices.write((context_id, member), 0);
                             
                             // Decrease the member count
@@ -350,7 +469,7 @@ pub mod ContextConfig {
                             self.revoke_all_privileges(context_id, member);
                             
                             // Emit an event for the removed member
-                            // self.emit(MemberRemoved { context_id: context_id, member_id: member });
+                            self.emit(MemberRemoved { message: format!("Removed `{}` from being a member of `{}`", member, context_id) });
                         }
                         i += 1;
                     },
@@ -391,15 +510,12 @@ pub mod ContextConfig {
     
                         // Grant the capability
                         self.grant_privilege(context_id, identity, capability);
-    
-                        // Emit an event for the granted capability
-                        // self.emit(CapabilityGranted { 
-                        //     context_id: context_id, 
-                        //     member_id: identity, 
-                        //     capability: capability 
-                        // });
+                        self.context_members_nonce.write((context_id, identity), 1);
     
                         i += 1;
+
+                        // Emit an event for the granted capability
+                        self.emit(CapabilityGranted { message: format!("Granted `{}` to `{}` in `{}`", capability, identity, context_id) });
                     },
                     Option::None => { break; },
                 }
@@ -433,11 +549,9 @@ pub mod ContextConfig {
                         self.revoke_privilege(context_id, identity, capability);
     
                         // Emit an event for the revoked capability
-                        // self.emit(CapabilityRevoked { 
-                        //     context_id: context_id, 
-                        //     member_id: identity, 
-                        //     capability: capability 
-                        // });
+                        self.emit(CapabilityRevoked { 
+                            message: format!("Revoked `{}` from `{}` in `{}`", capability, identity, context_id)
+                        });
     
                         i += 1;
                     },
@@ -478,6 +592,10 @@ pub mod ContextConfig {
         ) {
             let privilege_key = self.create_privilege_key(context_id, member_id, capability);
             self.privileges.write(privilege_key, true);
+
+            self.emit(CapabilityGranted { 
+                message: format!("Granted `{}` to `{}` in `{}`", capability, member_id, context_id)
+            });
         }
 
         fn revoke_privilege(
