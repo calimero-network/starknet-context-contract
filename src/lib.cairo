@@ -204,18 +204,19 @@ pub mod ContextConfig {
             // self.emit(StorageUsage { message: format!("Post-erase storage usage: {}", post_storage) });
         }
         
-        fn mutate(ref self: ContractState, signed_request: Signed) {
+        fn mutate(ref self: ContractState, signed_request: Signed) -> ByteArray {
             // Deserialize the payload
             let mut serialized = signed_request.payload.span();
             let request: Request = Serde::deserialize(ref serialized).unwrap();
 
-            assert(self.verify_signature(@signed_request, request.signer_id), 'Invalid signature');
+            assert(self.verify_signature(signed_request, request.signer_id), 'Invalid signature');
 
             match request.kind {
                 RequestKind::Context(context_request) => {
                     match context_request.kind {  
                         ContextRequestKind::Add((author_id, application)) => {
                             self.add_context(request.signer_id, context_request.context_id, author_id, application);
+                            "created context"
                         },
                         ContextRequestKind::UpdateApplication(application) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -225,6 +226,7 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.update_application(request.signer_id, context_request.context_id, application);
+                            "updated application"
                         },
                         ContextRequestKind::AddMembers(members) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -234,6 +236,7 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.add_members(request.signer_id, context_request.context_id, members);
+                            "added members"
                         },
                         ContextRequestKind::RemoveMembers(members) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -243,6 +246,7 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.remove_members(request.signer_id, context_request.context_id, members);
+                            "removed members"
                         },
                         ContextRequestKind::Grant(capabilities) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -252,6 +256,7 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.grant(request.signer_id, context_request.context_id, capabilities);
+                            "granted capabilities"
                         },
                         ContextRequestKind::Revoke(capabilities) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -261,6 +266,7 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.revoke(request.signer_id, context_request.context_id, capabilities);
+                            "revoked capabilities"
                         },
                     }
                 },
@@ -275,17 +281,14 @@ pub mod ContextConfig {
 
     #[generate_trait]
     impl SignatureVerifier of SignatureVerifierTrait {
-        fn verify_signature(self: @ContractState, signed_request: @Signed, signer_id: ContextIdentity) -> bool {
+        fn verify_signature(self: @ContractState, signed_request: Signed, signer_id: ContextIdentity) -> bool {
             // Hash the payload using Poseidon hash
             let hash = PoseidonTrait::new().update_with(poseidon_hash_span(signed_request.payload.span())).finalize();
-    
-            // Verify the signature
-            let (signature_r, signature_s) = signed_request.signature;
             check_ecdsa_signature(
                 hash,  // message hash
                 signer_id,  // public key
-                *signature_r,  // r
-                *signature_s   // s
+                signed_request.signature_r,  // r
+                signed_request.signature_s   // s
             )
         }
     }

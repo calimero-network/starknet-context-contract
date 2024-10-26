@@ -70,7 +70,8 @@ impl Felt252TryIntoCapability of TryInto<felt252, Capability> {
 #[derive(Drop, Serde, Debug)]
 pub struct Signed {
     pub payload: Array<felt252>,
-    pub signature: (felt252, felt252),  // (r, s) of the signature
+    pub signature_r: felt252,
+    pub signature_s: felt252,
 }
 
 #[derive(Drop, Serde, Debug)]

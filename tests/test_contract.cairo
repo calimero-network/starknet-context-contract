@@ -113,7 +113,8 @@ mod tests {
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
         
         // Call as node1 relayer
@@ -152,7 +153,8 @@ mod tests {
         let (r, s): (felt252, felt252) = context_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         // Call the mutate function
@@ -219,6 +221,7 @@ mod tests {
         // Serialize the request
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
+        println!("serialized: {:?}", serialized);
 
         // Hash the serialized request
         let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
@@ -227,8 +230,13 @@ mod tests {
 
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
+
+        let mut serialized_signed_request = ArrayTrait::new();
+        signed_request.serialize(ref serialized_signed_request);
+        println!("serialized_signed_request: {:?}", serialized_signed_request);
 
         // Call the mutate function
         match safe_dispatcher.mutate(signed_request) {
@@ -328,7 +336,8 @@ mod tests {
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
         // Call the mutate function
         let _res = spy_dispatcher.mutate(signed_request);
@@ -391,7 +400,8 @@ mod tests {
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         match safe_dispatcher.mutate(signed_request) {
@@ -423,7 +433,8 @@ mod tests {
 
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         let _res = spy_dispatcher.mutate(signed_request);
@@ -461,7 +472,8 @@ mod tests {
 
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         let _res = spy_dispatcher.mutate(signed_request);
@@ -563,7 +575,8 @@ mod tests {
 
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
         println!("Signed request: {:?}", signed_request);
 
@@ -612,7 +625,8 @@ mod tests {
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         let _res = spy_dispatcher.mutate(signed_request);
@@ -664,7 +678,8 @@ mod tests {
 
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         let _res = spy_dispatcher.mutate(signed_request);
@@ -742,7 +757,8 @@ mod tests {
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
-            signature: (r, s),
+            signature_r: r,
+            signature_s: s,
         };
 
         match safe_dispatcher.mutate(signed_request) {
