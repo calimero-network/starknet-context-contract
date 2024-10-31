@@ -31,9 +31,7 @@ mod tests {
     use snforge_std::signature::KeyPairTrait;
     use snforge_std::signature::stark_curve::{StarkCurveKeyPairImpl, StarkCurveSignerImpl, StarkCurveVerifierImpl};
 
-    use core::poseidon::PoseidonTrait;
     use core::poseidon::poseidon_hash_span;
-    use core::hash::{HashStateTrait, HashStateExTrait};
 
     fn deploy_contract(name: ByteArray) -> (ContractAddress, ContractAddress) {
         let owner: ContractAddress = starknet::contract_address_const::<0x123456789>();
@@ -108,7 +106,8 @@ mod tests {
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
@@ -149,7 +148,8 @@ mod tests {
         };
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         let (r, s): (felt252, felt252) = context_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,
@@ -221,10 +221,12 @@ mod tests {
         // Serialize the request
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
-        println!("serialized: {:?}", serialized);
+        // println!("serialized: {:?}", serialized);
 
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
+        // println!("hash: {:?}", hash);
         // Sign the hash
         let (r, s): (felt252, felt252) = context_key_pair.sign(hash).unwrap();
 
@@ -236,7 +238,7 @@ mod tests {
 
         let mut serialized_signed_request = ArrayTrait::new();
         signed_request.serialize(ref serialized_signed_request);
-        println!("serialized_signed_request: {:?}", serialized_signed_request);
+        // println!("serialized_signed_request: {:?}", serialized_signed_request);
 
         // Call the mutate function
         match safe_dispatcher.mutate(signed_request) {
@@ -263,14 +265,17 @@ mod tests {
         let app_source = application.source.clone();
         let app_metadata = application.metadata.clone();
 
+        println!("app_id: {:?}", app_id);
+
         // Verify that the context was added correctly
         match safe_dispatcher.application(context_id.clone()) {
             Result::Ok(result_application) => {
-                assert(result_application.id == app_id, 'Incorrect application ID');
-                assert(result_application.blob == app_blob, 'Incorrect application blob');
-                assert(result_application.size == app_size, 'Incorrect application size');
-                assert(result_application.source == app_source, 'Incorrect application source');
-                assert(result_application.metadata == app_metadata, 'Incorrect application metadata');
+                let application = result_application.unwrap();
+                assert(application.id == app_id, 'Incorrect application ID');
+                assert(application.blob == app_blob, 'Incorrect application blob');
+                assert(application.size == app_size, 'Incorrect application size');
+                assert(application.source == app_source, 'Incorrect application source');
+                assert(application.metadata == app_metadata, 'Incorrect application metadata');
             },
             Result::Err(error) => {
                 panic!("Failed to retrieve application: {:?}", error);
@@ -331,7 +336,8 @@ mod tests {
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
@@ -395,7 +401,8 @@ mod tests {
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
@@ -427,7 +434,8 @@ mod tests {
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
 
@@ -466,7 +474,8 @@ mod tests {
         request.serialize(ref serialized);
 
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
 
@@ -569,7 +578,8 @@ mod tests {
         request.serialize(ref serialized);
 
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = bob_key_pair.sign(hash).unwrap();
 
@@ -578,11 +588,11 @@ mod tests {
             signature_r: r,
             signature_s: s,
         };
-        println!("Signed request: {:?}", signed_request);
+        // println!("Signed request: {:?}", signed_request);
 
         let mut signed_request_serialized = ArrayTrait::new();
         signed_request.serialize(ref signed_request_serialized);
-        println!("Signed request serialized: {:?}", signed_request_serialized);
+        // println!("Signed request serialized: {:?}", signed_request_serialized);
 
         match safe_dispatcher.mutate(signed_request) {
             Result::Ok(_) => panic!("Entrypoint did not panic"),
@@ -593,11 +603,12 @@ mod tests {
 
         match safe_dispatcher.application(context_id.clone()) {
             Result::Ok(result_application) => {
-                assert(result_application.id == app_id, 'Incorrect application ID');
-                assert(result_application.blob == app_blob, 'Incorrect application blob');
-                assert(result_application.size == app_size, 'Incorrect application size');
-                assert(result_application.source == app_source, 'Incorrect application source');
-                assert(result_application.metadata == app_metadata, 'Incorrect application metadata');
+                let application = result_application.unwrap();
+                assert(application.id == app_id, 'Incorrect application ID');
+                assert(application.blob == app_blob, 'Incorrect application blob');
+                assert(application.size == app_size, 'Incorrect application size');
+                assert(application.source == app_source, 'Incorrect application source');
+                assert(application.metadata == app_metadata, 'Incorrect application metadata');
             },
             Result::Err(error) => {
                 panic!("Failed to retrieve application: {:?}", error);
@@ -620,7 +631,8 @@ mod tests {
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
         // Hash the serialized request
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         // Sign the hash
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
@@ -646,11 +658,12 @@ mod tests {
 
         match safe_dispatcher.application(context_id.clone()) {
             Result::Ok(result_application) => {
-                assert(result_application.id == new_application.id, 'Incorrect application ID');
-                assert(result_application.blob == new_application.blob, 'Incorrect application blob');
-                assert(result_application.size == new_application.size, 'Incorrect application size');
-                assert(result_application.source == new_application.source, 'Incorrect application source');
-                assert(result_application.metadata == new_application.metadata, 'Incorrect application metadata');
+                let application = result_application.unwrap();
+                assert(application.id == new_application.id, 'Incorrect application ID');
+                assert(application.blob == new_application.blob, 'Incorrect application blob');
+                assert(application.size == new_application.size, 'Incorrect application size');
+                assert(application.source == new_application.source, 'Incorrect application source');
+                assert(application.metadata == new_application.metadata, 'Incorrect application metadata');
             },
             Result::Err(error) => {
                 panic!("Failed to retrieve application: {:?}", error);
@@ -673,7 +686,8 @@ mod tests {
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
 
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
 
         let signed_request: Signed = Signed {
@@ -753,7 +767,8 @@ mod tests {
         };
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
-        let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        // let hash = PoseidonTrait::new().update_with(poseidon_hash_span(serialized.span())).finalize();
+        let hash = poseidon_hash_span(serialized.span());
         let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
         let signed_request: Signed = Signed {
             payload: serialized,

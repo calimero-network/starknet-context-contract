@@ -24,9 +24,7 @@ pub use i_context_configs::{
 
 #[starknet::contract]
 pub mod ContextConfig {
-    use core::poseidon::PoseidonTrait;
     use core::poseidon::poseidon_hash_span;
-    use core::hash::{HashStateTrait, HashStateExTrait};
     use core::ecdsa::check_ecdsa_signature;
     use starknet::storage::{
         Map,
@@ -96,16 +94,23 @@ pub mod ContextConfig {
     #[abi(embed_v0)]
     impl ContextConfigsImpl of super::i_context_configs::IContextConfigs<ContractState> {
 
-        fn application(self: @ContractState, context_id: ContextId) -> Application {
+        fn application(self: @ContractState, context_id: ContextId) -> Option<Application> {
             // Read the context from storage
             let context = self.contexts.read(context_id);
             
-            // Return the application associated with this context
-            context.application
+            if context.member_count > 0 {
+                Option::Some(context.application)
+            } else {
+                Option::None
+            }
         }
 
         fn get_member_nonce(self: @ContractState, context_id: ContextId, member_id: ContextIdentity) -> u64 {
             self.context_members_nonce.read((context_id, member_id))
+        }
+
+        fn has_member(self: @ContractState, context_id: ContextId, member_id: ContextIdentity) -> bool {
+            self.context_member_indices.read((context_id, member_id)) != 0
         }
 
         fn members(self: @ContractState, context_id: ContextId, offset: u32, length: u32) -> Array<ContextIdentity> {
@@ -204,7 +209,7 @@ pub mod ContextConfig {
             // self.emit(StorageUsage { message: format!("Post-erase storage usage: {}", post_storage) });
         }
         
-        fn mutate(ref self: ContractState, signed_request: Signed) -> ByteArray {
+        fn mutate(ref self: ContractState, signed_request: Signed) {
             // Deserialize the payload
             let mut serialized = signed_request.payload.span();
             let request: Request = Serde::deserialize(ref serialized).unwrap();
@@ -216,7 +221,6 @@ pub mod ContextConfig {
                     match context_request.kind {  
                         ContextRequestKind::Add((author_id, application)) => {
                             self.add_context(request.signer_id, context_request.context_id, author_id, application);
-                            "created context"
                         },
                         ContextRequestKind::UpdateApplication(application) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -226,7 +230,6 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.update_application(request.signer_id, context_request.context_id, application);
-                            "updated application"
                         },
                         ContextRequestKind::AddMembers(members) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -236,7 +239,6 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.add_members(request.signer_id, context_request.context_id, members);
-                            "added members"
                         },
                         ContextRequestKind::RemoveMembers(members) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -246,7 +248,6 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.remove_members(request.signer_id, context_request.context_id, members);
-                            "removed members"
                         },
                         ContextRequestKind::Grant(capabilities) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -256,7 +257,6 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.grant(request.signer_id, context_request.context_id, capabilities);
-                            "granted capabilities"
                         },
                         ContextRequestKind::Revoke(capabilities) => {
                             let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
@@ -266,7 +266,6 @@ pub mod ContextConfig {
                             );
                             self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
                             self.revoke(request.signer_id, context_request.context_id, capabilities);
-                            "revoked capabilities"
                         },
                     }
                 },
@@ -283,7 +282,9 @@ pub mod ContextConfig {
     impl SignatureVerifier of SignatureVerifierTrait {
         fn verify_signature(self: @ContractState, signed_request: Signed, signer_id: ContextIdentity) -> bool {
             // Hash the payload using Poseidon hash
-            let hash = PoseidonTrait::new().update_with(poseidon_hash_span(signed_request.payload.span())).finalize();
+            let hash = poseidon_hash_span(signed_request.payload.span());
+            // let hash = PoseidonTrait::new().update_with(signed_request.payload).finalize();
+            // let hash = PoseidonTrait::new().update_with(first_hash).finalize();
             check_ecdsa_signature(
                 hash,  // message hash
                 signer_id,  // public key
