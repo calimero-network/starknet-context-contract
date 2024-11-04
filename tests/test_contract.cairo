@@ -85,6 +85,7 @@ mod tests {
         // Create a signed request
         let mut request = Request {
             signer_id: alice_id.clone(),
+            user_id: alice_id.clone(),
             nonce: alice_nonce,
             kind: RequestKind::Context(
                 ContextRequest {
@@ -102,6 +103,8 @@ mod tests {
                 }
             )
         };
+
+        println!("request: {:?}", request);
         // Serialize the request
         let mut serialized = ArrayTrait::new();
         request.serialize(ref serialized);
@@ -115,6 +118,8 @@ mod tests {
             signature_r: r,
             signature_s: s,
         };
+
+        println!("signed_request: {:?}", signed_request);
         
         // Call as node1 relayer
         start_cheat_caller_address(contract_address, node1_id);

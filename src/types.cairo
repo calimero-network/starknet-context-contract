@@ -78,6 +78,7 @@ pub struct Signed {
 pub struct Request {
     pub kind: RequestKind,
     pub signer_id: ContextIdentity,
+    pub user_id: ContextIdentity,
     pub nonce: u64,
 }
 

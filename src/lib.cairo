@@ -77,6 +77,7 @@ pub mod ContextConfig {
         privileges: Map::<felt252, bool>,
         context_members: Map::<(ContextId, MemberIndex), ContextIdentity>,
         context_members_nonce: Map::<(ContextId, ContextIdentity), u64>,
+        context_members_keys: Map::<ContextIdentity, ContextIdentity>,
         context_member_indices: Map::<(ContextId, ContextIdentity), MemberIndex>,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage
@@ -216,56 +217,59 @@ pub mod ContextConfig {
 
             assert(self.verify_signature(signed_request, request.signer_id), 'Invalid signature');
 
+            // Add key relation between ecdsa public key and ed25519 public key
+            self.context_members_keys.write(request.signer_id, request.user_id);
+
             match request.kind {
                 RequestKind::Context(context_request) => {
                     match context_request.kind {  
                         ContextRequestKind::Add((author_id, application)) => {
-                            self.add_context(request.signer_id, context_request.context_id, author_id, application);
+                            self.add_context(request.user_id, context_request.context_id, author_id, application);
                         },
                         ContextRequestKind::UpdateApplication(application) => {
-                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
-                            assert(
-                                current_nonce == request.nonce,
-                                'Nonce mismatch'
-                            );
-                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
-                            self.update_application(request.signer_id, context_request.context_id, application);
+                            // let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            // assert(
+                            //     current_nonce == request.nonce,
+                            //     'Nonce mismatch'
+                            // );
+                            // self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
+                            self.update_application(request.user_id, context_request.context_id, application);
                         },
                         ContextRequestKind::AddMembers(members) => {
-                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
-                            assert(
-                                current_nonce == request.nonce,
-                                'Nonce mismatch'
-                            );
-                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
-                            self.add_members(request.signer_id, context_request.context_id, members);
+                            // let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            // assert(
+                            //     current_nonce == request.nonce,
+                            //     'Nonce mismatch'
+                            // );
+                            // self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
+                            self.add_members(request.user_id, context_request.context_id, members);
                         },
                         ContextRequestKind::RemoveMembers(members) => {
-                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
-                            assert(
-                                current_nonce == request.nonce,
-                                'Nonce mismatch'
-                            );
-                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
-                            self.remove_members(request.signer_id, context_request.context_id, members);
+                            // let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            // assert(
+                            //     current_nonce == request.nonce,
+                            //     'Nonce mismatch'
+                            // );
+                            // self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
+                            self.remove_members(request.user_id, context_request.context_id, members);
                         },
                         ContextRequestKind::Grant(capabilities) => {
-                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
-                            assert(
-                                current_nonce == request.nonce,
-                                'Nonce mismatch'
-                            );
-                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
-                            self.grant(request.signer_id, context_request.context_id, capabilities);
+                            // let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            // assert(
+                            //     current_nonce == request.nonce,
+                            //     'Nonce mismatch'
+                            // );
+                            // self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
+                            self.grant(request.user_id, context_request.context_id, capabilities);
                         },
                         ContextRequestKind::Revoke(capabilities) => {
-                            let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
-                            assert(
-                                current_nonce == request.nonce,
-                                'Nonce mismatch'
-                            );
-                            self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
-                            self.revoke(request.signer_id, context_request.context_id, capabilities);
+                            // let current_nonce = self.context_members_nonce.read((context_request.context_id, request.signer_id));
+                            // assert(
+                            //     current_nonce == request.nonce,
+                            //     'Nonce mismatch'
+                            // );
+                            // self.context_members_nonce.write((context_request.context_id, request.signer_id), current_nonce + 1);
+                            self.revoke(request.user_id, context_request.context_id, capabilities);
                         },
                     }
                 },
@@ -283,8 +287,6 @@ pub mod ContextConfig {
         fn verify_signature(self: @ContractState, signed_request: Signed, signer_id: ContextIdentity) -> bool {
             // Hash the payload using Poseidon hash
             let hash = poseidon_hash_span(signed_request.payload.span());
-            // let hash = PoseidonTrait::new().update_with(signed_request.payload).finalize();
-            // let hash = PoseidonTrait::new().update_with(first_hash).finalize();
             check_ecdsa_signature(
                 hash,  // message hash
                 signer_id,  // public key
@@ -303,9 +305,6 @@ pub mod ContextConfig {
             author_id: ContextIdentity,
             application: Application
         ) {
-            // Verify signer
-            assert(signer_id == context_id, 'signer_id equals context_id');
-        
             // Check if context already exists
             let existing_context = self.contexts.read(context_id);
             assert(existing_context.member_count == 0, 'Context already exists');
@@ -358,7 +357,7 @@ pub mod ContextConfig {
 
         fn update_application(
             ref self: ContractState,
-            signer_id: ContextIdentity,
+            user_id: ContextIdentity,
             context_id: felt252,
             new_application: Application
         ) {
@@ -368,7 +367,7 @@ pub mod ContextConfig {
     
             // Check if the signer has the necessary permissions
             assert(
-                self.has_privilege(context_id, signer_id, Capability::ManageApplication), 
+                self.has_privilege(context_id, user_id, Capability::ManageApplication), 
                 'missing privileges'
             );
     
