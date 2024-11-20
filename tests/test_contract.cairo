@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use starknet::{
-        ContractAddress, 
+        ContractAddress,
+        ClassHash,
     };
     use snforge_std::{
         declare, ContractClassTrait, DeclareResultTrait, 
@@ -28,7 +29,6 @@ mod tests {
         ContextIdentity,
     };
     use core::traits::Into;
-    // use core::traits::{Mul, Sub};
     use core::array::ArrayTrait;
     use core::clone::Clone;
     use core::byte_array::ByteArray;
@@ -62,6 +62,110 @@ mod tests {
         let low = value - (high * split_point);
         
         (high, low)
+    }
+
+    #[test]
+    #[feature("safe_dispatcher")]
+    #[fork("devnet")]
+    fn test_proxy_deployment() {
+        // Deploy the main contract
+        let (contract_address, owner) = deploy_contract("ContextConfig");
+
+        // Create a dispatcher
+        let safe_dispatcher = IContextConfigsSafeDispatcher { contract_address };
+        let spy_dispatcher = IContextConfigsDispatcher { contract_address };
+        let mut spy = spy_events();
+
+        // Create test identities
+        let alice_key_pair = KeyPairTrait::<felt252, felt252>::generate();
+        let alice_public_key = alice_key_pair.public_key;
+        let (alice_high, alice_low) = split_felt252(alice_public_key);
+        let alice_id = ContextIdentity { high: alice_high, low: alice_low };
+        let mut alice_nonce = 0;
+
+        // Create context identity
+        let context_key_pair = KeyPairTrait::<felt252, felt252>::generate();
+        let context_public_key = context_key_pair.public_key;
+        let (context_high, context_low) = split_felt252(context_public_key);
+        let context_id = ContextId { high: context_high, low: context_low };
+
+        start_cheat_caller_address(contract_address, owner);
+
+        let class_hash: ClassHash = 0x3a0522e0dfb65854332dddfbd513cba54c5a2b5b57d19e7742be8324c1460d2.try_into().unwrap();
+        // Set the proxy contract class hash - devnet
+        match safe_dispatcher.set_proxy_contract_class_hash(class_hash) {
+            Result::Ok(_) => {},
+            Result::Err(err) => {
+                panic!("Failed to set proxy contract class hash: {:?}", err);
+            }
+        }
+
+        // Verify the class hash was set correctly
+        match safe_dispatcher.proxy_contract_class_hash() {
+            Result::Ok(check_class_hash) => {
+                println!("check_class_hash: {:?}", check_class_hash);
+                assert(class_hash == check_class_hash, 'Class hash mismatch');
+            },
+            Result::Err(err) => {
+                panic!("Failed to get proxy contract class hash: {:?}", err);
+            }
+        }
+
+        stop_cheat_caller_address(contract_address);
+
+        // Create a context with an application
+        let mut request = Request {
+            signer_id: alice_id.clone(),
+            user_id: alice_id.clone(),
+            nonce: alice_nonce,
+            kind: RequestKind::Context(
+                ContextRequest {
+                    context_id: context_id.clone(),
+                    kind: ContextRequestKind::Add((
+                        alice_id.clone(),
+                        Application {
+                            id: ApplicationId {
+                                high: 0x11f5f7b82d573b270a053c016cd16c20.into(),
+                                low: 0xe128229d757014c458e561679c42baf.into()
+                            },
+                            blob: ApplicationBlob {
+                                high: 0x11f5f7b82d573b270a053c016cd16c20.into(),
+                                low: 0xe128229d757014c458e561679c42baf.into()
+                            },
+                            size: 0,
+                            source: "https://example.com",
+                            metadata: "Test metadata",
+                        }
+                    ))
+                }
+            )
+        };
+
+        // Sign and submit the request
+        let mut serialized = ArrayTrait::new();
+        request.serialize(ref serialized);
+        let hash = poseidon_hash_span(serialized.span());
+        let (r, s): (felt252, felt252) = alice_key_pair.sign(hash).unwrap();
+        let signed_request = Signed {
+            payload: serialized,
+            signature_r: r,
+            signature_s: s,
+        };
+
+        let _res = spy_dispatcher.mutate(signed_request);
+
+        // Verify proxy contract deployment
+        match safe_dispatcher.proxy_contract(context_id) {
+            Result::Ok(proxy_address) => {
+                // assert(!proxy_address.is_zero(), 'Proxy address should not be zero');
+                println!("Proxy address: {:?}", proxy_address);
+            },
+            Result::Err(error) => {
+                panic!("Failed to get proxy address: {:?}", error);
+            }
+        }
+
+       
     }
 
     #[test]

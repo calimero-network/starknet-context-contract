@@ -1,5 +1,7 @@
 use core::fmt::{Display, Error, Formatter};
 use core::poseidon::poseidon_hash_span;
+use starknet::ContractAddress;
+
 #[derive(Drop, Serde, Copy, Debug, starknet::Store)]
 pub struct ContextId {
     pub high: felt252,  // First 16 bytes (128 bits)
@@ -73,6 +75,7 @@ pub struct Context {
     pub member_count: u32,
     pub application_revision: u64,  // Track application changes
     pub members_revision: u64,      // Track member list changes
+    pub proxy_address: ContractAddress,
 }
 
 // Application ID (32 bytes)
@@ -157,6 +160,7 @@ impl ApplicationDisplay of Display<Application> {
 pub enum Capability {
     ManageApplication,
     ManageMembers,
+    ProxyCode,
 }
 
 // Add this implementation to your types.cairo file
@@ -165,6 +169,7 @@ impl CapabilityDisplay of core::fmt::Display<Capability> {
         let capability_str: ByteArray = match self {
             Capability::ManageApplication => "ManageApplication",
             Capability::ManageMembers => "ManageMembers",
+            Capability::ProxyCode => "ProxyCode",
         };
         Display::fmt(@capability_str, ref f)
     }
@@ -176,6 +181,7 @@ impl CapabilityIntoFelt252 of Into<Capability, felt252> {
         match self {
             Capability::ManageApplication => 0,
             Capability::ManageMembers => 1,
+            Capability::ProxyCode => 2,
         }
     }
 }
@@ -186,6 +192,7 @@ impl Felt252TryIntoCapability of TryInto<felt252, Capability> {
         match self {
             0 => Option::Some(Capability::ManageApplication),
             1 => Option::Some(Capability::ManageMembers),
+            2 => Option::Some(Capability::ProxyCode),
             _ => Option::None,
         }
     }
@@ -225,6 +232,7 @@ pub enum ContextRequestKind {
     RemoveMembers: Array<ContextIdentity>,
     Grant: Array<(ContextIdentity, Capability)>,
     Revoke: Array<(ContextIdentity, Capability)>,
+    UpgradeProxy: (ContextId, ContextIdentity),
 }
 
 // Events
@@ -257,6 +265,11 @@ pub struct CapabilityGranted {
 
 #[derive(Drop, starknet::Event)]
 pub struct CapabilityRevoked {
+    pub message: ByteArray,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct ProxyContractUpgraded {
     pub message: ByteArray,
 }
 

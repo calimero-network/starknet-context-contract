@@ -3,8 +3,6 @@ name = "context_config"
 version = "0.1.0"
 edition = "2023_11"
 
-# See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest.html
-
 [dependencies]
 starknet = "2.8.4"
 openzeppelin = "0.18.0"
@@ -15,6 +13,17 @@ assert_macros = "2.8.4"
 
 [[target.starknet-contract]]
 sierra = true
+allowed-libfuncs-list.name = "experimental"
+
+# Add this section
+[lib]
+name = "context_config"
+sierra = true
 
 [scripts]
 test = "snforge test"
+
+[[tool.snforge.fork]]
+name = "devnet"
+url = "http://localhost:5050/rpc"
+block_id.tag = "latest"

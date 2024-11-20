@@ -25,8 +25,18 @@ pub use i_context_configs::{
     IContextConfigsDispatcher, 
     IContextConfigsDispatcherTrait, 
     IContextConfigsSafeDispatcher, 
-    IContextConfigsSafeDispatcherTrait
+    IContextConfigsSafeDispatcherTrait,
+    // IUniversalDeployer,
+    // IUniversalDeployerDispatcher,
+    // IUniversalDeployerDispatcherTrait,
 };
+
+use starknet::ClassHash;
+
+#[starknet::interface]
+pub trait IProxyContract<TContractState> {
+    fn upgrade_contract(self: @TContractState, class_hash: ClassHash);
+}
 
 #[starknet::contract]
 pub mod ContextConfig {
@@ -58,9 +68,15 @@ pub mod ContextConfig {
         CapabilityGranted,
         ApplicationUpdated,
         CapabilityRevoked,
+        ProxyContractUpgraded,
     };
 
+    use super::{IProxyContractDispatcher, IProxyContractDispatcherTrait};
+
     use starknet::ContractAddress;
+    use core::num::traits::Zero;
+    use starknet::class_hash::ClassHash;
+    use starknet::syscalls::deploy_syscall;
 
     use openzeppelin_access::ownable::OwnableComponent;
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
@@ -74,8 +90,9 @@ pub mod ContextConfig {
         CapabilityGranted: CapabilityGranted,
         CapabilityRevoked: CapabilityRevoked,
         MemberRemoved: MemberRemoved,
+        ProxyContractUpgraded: ProxyContractUpgraded,
         #[flat]
-        OwnableEvent: OwnableComponent::Event
+        OwnableEvent: OwnableComponent::Event,
     }
 
     #[storage]
@@ -87,6 +104,7 @@ pub mod ContextConfig {
         context_members_nonce: Map::<felt252, u64>,
         context_members_keys: Map::<felt252, felt252>,
         context_member_indices: Map::<felt252, MemberIndex>,
+        proxy_contract_class_hash: ClassHash,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage
     }
@@ -196,6 +214,17 @@ pub mod ContextConfig {
             result
         }
 
+        fn proxy_contract(self: @ContractState, context_id: ContextId) -> ContractAddress {
+            let context_key = self.create_context_key(@context_id);
+            let context = self.contexts.read(context_key);
+            context.proxy_address
+        }
+
+        fn set_proxy_contract_class_hash(ref self: ContractState, class_hash: ClassHash) {
+            self.ownable.assert_only_owner();
+            self.proxy_contract_class_hash.write(class_hash);
+        }
+
         fn erase(ref self: ContractState) {
             self.ownable.assert_only_owner();
             
@@ -246,6 +275,7 @@ pub mod ContextConfig {
                         member_count: 0,
                         application_revision: 0,  // Initial revision
                         members_revision: 0,      // Initial revision
+                        proxy_address: Zero::<ContractAddress>::zero(),
                     }
                 );
             }
@@ -373,6 +403,21 @@ pub mod ContextConfig {
                                 capabilities
                             );
                         },
+                        ContextRequestKind::UpgradeProxy((context_id, signer_id)) => {
+                            // Verify nonce
+                            // let nonce_key = self.create_member_key(
+                            //     @context_request.context_id, 
+                            //     @request.signer_id
+                            // );
+                            // let current_nonce = self.context_members_nonce.read(nonce_key);
+                            // assert(current_nonce == request.nonce, 'Nonce mismatch');
+                            
+                            // // Update nonce
+                            // self.context_members_nonce.write(nonce_key, current_nonce + 1);
+                            
+                            // Upgrade the proxy contract
+                            self.upgrade_proxy_contract(context_id, signer_id);
+                        },
                     }
                 }
             }
@@ -427,6 +472,8 @@ pub mod ContextConfig {
             let context_key = self.create_context_key(@context_id);
             let existing_context = self.contexts.read(context_key);
             assert(existing_context.member_count == 0, 'Context already exists');
+
+            let proxy_address = self.deploy_proxy_contract(context_id);
         
             // Create new context with initial revisions
             let new_context = Context {
@@ -434,6 +481,7 @@ pub mod ContextConfig {
                 member_count: 0,
                 application_revision: 1,  // Initial revision
                 members_revision: 1,      // Initial revision
+                proxy_address: proxy_address,
             };
             self.contexts.write(context_key, new_context);
             self.context_ids.append().write(context_id.clone());
@@ -443,14 +491,13 @@ pub mod ContextConfig {
         
             // Grant initial privileges to author
             self.grant_privilege(@context_id, author_id, Capability::ManageApplication);
+            self.grant_privilege(@context_id, author_id, Capability::ManageMembers);
+            self.grant_privilege(@context_id, author_id, Capability::ProxyCode);
             
             // Update nonce for author
             let nonce_key = self.create_member_key(@context_id, @author_id);
             self.context_members_nonce.write(nonce_key, 1);
             
-            // Grant member management privilege
-            self.grant_privilege(@context_id, author_id, Capability::ManageMembers);
-        
             // Log context creation
             self.emit(ContextCreated { 
                 message: format!(
@@ -730,6 +777,68 @@ pub mod ContextConfig {
                 }
             };
         }
+
+        fn deploy_proxy_contract(ref self: ContractState, context_id: ContextId) -> ContractAddress {
+            let owner = self.ownable.owner();
+    
+            let mut constructor_calldata = ArrayTrait::new();
+            constructor_calldata.append(owner.into());
+            constructor_calldata.append(context_id.high.into());
+            constructor_calldata.append(context_id.low.into());
+            constructor_calldata.append(starknet::get_contract_address().into());
+        
+            // Class hash of the proxy contract
+            let class_hash: ClassHash = self.proxy_contract_class_hash.read();
+        
+            // Create deterministic salt from context_id
+            let context_key = self.create_context_key(@context_id);
+            
+            // Deploy using syscall
+            let (contract_address, _) = deploy_syscall(
+                class_hash,
+                context_key, // Using context key as salt for deterministic address
+                constructor_calldata.span(),
+                false // deploy from zero address
+            ).unwrap();
+        
+            contract_address
+        }
+
+        fn upgrade_proxy_contract(
+            ref self: ContractState,
+            context_id: ContextId,
+            signer_id: ContextIdentity,
+        ) {
+            let context_key = self.create_context_key(@context_id);
+            let context = self.contexts.read(context_key);
+            assert(context.member_count > 0, 'Context does not exist');
+
+            // Check if the signer has the ProxyCode privilege
+            assert(
+                self.has_privilege(@context_id, signer_id, Capability::ProxyCode),
+                'Unauthorized'
+            );
+
+            // Get the proxy contract address and create dispatcher
+            let proxy_address = context.proxy_address;
+            let proxy_dispatcher = IProxyContractDispatcher { contract_address: proxy_address };
+            
+            // Get the current class hash from storage
+            let class_hash = self.proxy_contract_class_hash.read();
+            
+            // Call the upgrade method on the proxy contract
+            proxy_dispatcher.upgrade_contract(class_hash);
+
+            // Store the current class hash as the new default for future deployments
+            self.proxy_contract_class_hash.write(class_hash);
+
+            // Emit an event for the successful upgrade
+            self.emit(ProxyContractUpgraded {
+                message: format!(
+                    "Proxy contract upgraded to class hash ({:?})", class_hash
+                )
+            });
+        }
     }
 
     #[generate_trait]
@@ -767,6 +876,9 @@ pub mod ContextConfig {
             }
             if self.has_privilege(@context_id, member, Capability::ManageMembers) {
                 capabilities.append(Capability::ManageMembers);
+            }
+            if self.has_privilege(@context_id, member, Capability::ProxyCode) {
+                capabilities.append(Capability::ProxyCode);
             }
             capabilities
         }
@@ -826,15 +938,16 @@ pub mod ContextConfig {
             context_id: @ContextId,
             member_id: ContextIdentity
         ) {
-            // Since we're calling revoke_privilege twice, we only need one revision increment
+            // Since we're calling revoke_privilege multiple times, we only need one revision increment
             let context_key = self.create_context_key(context_id);
             let mut context = self.contexts.read(context_key);
             context.members_revision += 1;
             self.contexts.write(context_key, context);
 
-            // Now revoke the privileges
+            // Now revoke all privileges
             self.revoke_privilege(context_id, member_id, Capability::ManageMembers);
             self.revoke_privilege(context_id, member_id, Capability::ManageApplication);
+            self.revoke_privilege(context_id, member_id, Capability::ProxyCode);
         }
     }
 
