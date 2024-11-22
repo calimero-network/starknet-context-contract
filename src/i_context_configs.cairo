@@ -22,6 +22,6 @@ pub trait IContextConfigs<TContractState> {
     
     // Mutation functions
     fn mutate(ref self: TContractState, signed_request: Signed);
-    fn set_proxy_contract_class_hash(ref self: TContractState, class_hash: ClassHash);
+    fn set_proxy_contract_class_hash(ref self: TContractState, class_hash: ClassHash, native_token_address: ContractAddress);
     fn erase(ref self: TContractState);
 }

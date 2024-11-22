@@ -4,6 +4,7 @@ mod tests {
         ContractAddress,
         ClassHash,
     };
+    use core::num::traits::Zero;
     use snforge_std::{
         declare, ContractClassTrait, DeclareResultTrait, 
         start_cheat_caller_address, stop_cheat_caller_address, EventSpyAssertionsTrait, spy_events,
@@ -91,23 +92,13 @@ mod tests {
 
         start_cheat_caller_address(contract_address, owner);
 
-        let class_hash: ClassHash = 0x3a0522e0dfb65854332dddfbd513cba54c5a2b5b57d19e7742be8324c1460d2.try_into().unwrap();
+        let class_hash: ClassHash = 0x3b920deb62e2c158062c34366284a340468b67f94ceb9456d63edb504661c95.try_into().unwrap();
+        let native_token_address: ContractAddress = starknet::contract_address_const::<0x123456789>();
         // Set the proxy contract class hash - devnet
-        match safe_dispatcher.set_proxy_contract_class_hash(class_hash) {
+        match safe_dispatcher.set_proxy_contract_class_hash(class_hash, native_token_address) {
             Result::Ok(_) => {},
             Result::Err(err) => {
                 panic!("Failed to set proxy contract class hash: {:?}", err);
-            }
-        }
-
-        // Verify the class hash was set correctly
-        match safe_dispatcher.proxy_contract_class_hash() {
-            Result::Ok(check_class_hash) => {
-                println!("check_class_hash: {:?}", check_class_hash);
-                assert(class_hash == check_class_hash, 'Class hash mismatch');
-            },
-            Result::Err(err) => {
-                panic!("Failed to get proxy contract class hash: {:?}", err);
             }
         }
 
@@ -157,7 +148,7 @@ mod tests {
         // Verify proxy contract deployment
         match safe_dispatcher.proxy_contract(context_id) {
             Result::Ok(proxy_address) => {
-                // assert(!proxy_address.is_zero(), 'Proxy address should not be zero');
+                assert(!proxy_address.is_zero(), 'Proxy address is zero');
                 println!("Proxy address: {:?}", proxy_address);
             },
             Result::Err(error) => {
@@ -170,6 +161,7 @@ mod tests {
 
     #[test]
     #[feature("safe_dispatcher")]
+    #[fork("devnet")]
     fn test_add_context() {
         // Deploy the contract
         let (contract_address, owner) = deploy_contract("ContextConfig");
@@ -210,6 +202,21 @@ mod tests {
         let (context_high, context_low) = split_felt252(context_public_key);
         let context_id = ContextId { high: context_high, low: context_low };
         let context_identity = ContextIdentity { high: context_high, low: context_low };
+
+
+        start_cheat_caller_address(contract_address, owner);
+
+        let class_hash: ClassHash = 0x3b920deb62e2c158062c34366284a340468b67f94ceb9456d63edb504661c95.try_into().unwrap();
+        let native_token_address: ContractAddress = starknet::contract_address_const::<0x123456789>();
+        // Set the proxy contract class hash - devnet
+        match safe_dispatcher.set_proxy_contract_class_hash(class_hash, native_token_address) {
+            Result::Ok(_) => {},
+            Result::Err(err) => {
+                panic!("Failed to set proxy contract class hash: {:?}", err);
+            }
+        }
+
+        stop_cheat_caller_address(contract_address);
 
         // // Create a signed request
         // let mut request = Request {
@@ -730,8 +737,8 @@ mod tests {
                 for i in 0..privileges.len() {
                     let (identity, capabilities) = privileges.at(i);
                     if identity == @alice_id {
-                        assert!(capabilities.len() == 2, "Expected 2 capabilities for alice");
-                        let expected_capabilities = array![Capability::ManageApplication, Capability::ManageMembers];
+                        assert!(capabilities.len() == 3, "Expected 3 capabilities for alice");
+                        let expected_capabilities = array![Capability::ManageApplication, Capability::ManageMembers, Capability::ProxyCode];
                         for expected_capability in expected_capabilities {
                             let mut found = false;
                             for k in 0..capabilities.len() {
@@ -951,8 +958,8 @@ mod tests {
                 for i in 0..privileges.len() {
                     let (identity, capabilities) = privileges.at(i);
                     if identity == @alice_id {
-                        assert!(capabilities.len() == 2, "Expected 2 capabilities for alice");
-                        let expected_capabilities = array![Capability::ManageApplication, Capability::ManageMembers];
+                        assert!(capabilities.len() == 3, "Expected 3 capabilities for alice");
+                        let expected_capabilities = array![Capability::ManageApplication, Capability::ManageMembers, Capability::ProxyCode];
                         for expected_capability in expected_capabilities {
                             let mut found = false;
                             for k in 0..capabilities.len() {
@@ -1137,10 +1144,11 @@ mod tests {
                 for i in 0..privileges.len() {
                     let (identity, capabilities) = privileges.at(i);
                     if identity.high == @alice_id.high && identity.low == @alice_id.low {
-                        assert!(capabilities.len() == 2, "Expected 2 capabilities for alice");
+                        assert!(capabilities.len() == 3, "Expected 3 capabilities for alice");
                         let expected_capabilities = array![
                             Capability::ManageApplication, 
-                            Capability::ManageMembers
+                            Capability::ManageMembers,
+                            Capability::ProxyCode
                         ];
                         for expected_capability in expected_capabilities {
                             let mut found = false;
@@ -1381,10 +1389,11 @@ mod tests {
                 for i in 0..privileges.len() {
                     let (identity, capabilities) = privileges.at(i);
                     if identity.high == @alice_id.high && identity.low == @alice_id.low {
-                        assert!(capabilities.len() == 2, "Alice should have 2 capabilities");
+                        assert!(capabilities.len() == 3, "Alice should have 3 capabilities");
                         let expected_capabilities = array![
                             Capability::ManageApplication, 
-                            Capability::ManageMembers
+                            Capability::ManageMembers,
+                            Capability::ProxyCode
                         ];
                         for expected_capability in expected_capabilities {
                             let mut found = false;

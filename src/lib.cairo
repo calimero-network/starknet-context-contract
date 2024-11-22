@@ -105,6 +105,7 @@ pub mod ContextConfig {
         context_members_keys: Map::<felt252, felt252>,
         context_member_indices: Map::<felt252, MemberIndex>,
         proxy_contract_class_hash: ClassHash,
+        proxy_contract_native_token_address: ContractAddress,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage
     }
@@ -220,9 +221,10 @@ pub mod ContextConfig {
             context.proxy_address
         }
 
-        fn set_proxy_contract_class_hash(ref self: ContractState, class_hash: ClassHash) {
+        fn set_proxy_contract_class_hash(ref self: ContractState, class_hash: ClassHash, native_token_address: ContractAddress) {
             self.ownable.assert_only_owner();
             self.proxy_contract_class_hash.write(class_hash);
+            self.proxy_contract_native_token_address.write(native_token_address);
         }
 
         fn erase(ref self: ContractState) {
@@ -781,11 +783,13 @@ pub mod ContextConfig {
         fn deploy_proxy_contract(ref self: ContractState, context_id: ContextId) -> ContractAddress {
             let owner = self.ownable.owner();
     
+            let native_token_address = self.proxy_contract_native_token_address.read();
             let mut constructor_calldata = ArrayTrait::new();
             constructor_calldata.append(owner.into());
             constructor_calldata.append(context_id.high.into());
             constructor_calldata.append(context_id.low.into());
             constructor_calldata.append(starknet::get_contract_address().into());
+            constructor_calldata.append(native_token_address.into());
         
             // Class hash of the proxy contract
             let class_hash: ClassHash = self.proxy_contract_class_hash.read();
